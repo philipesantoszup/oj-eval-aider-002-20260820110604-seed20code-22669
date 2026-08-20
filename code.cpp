@@ -222,28 +222,29 @@ int2048 int2048::multiply_mag(const int2048& a, const int2048& b) {
         res_1e5.pop_back();
     }
 
-    int2048 res;
-    res.is_negative = false;
-    res.mag.clear();
-    long long current = 0;
-    long long power = 1;
-    int digits = 0;
-    for (int i = 0; i < res_1e5.size(); i++) {
-        long long d = res_1e5[i];
-        current += d * power;
-        power *= 100000LL;
-        digits += 5;
-        if (digits >= 9) {
-            res.mag.push_back(current % BASE);
-            current /= BASE;
-            power = 100000LL;
-            digits -= 9;
+    // Build decimal string from base-1e5 digits
+    std::string s;
+    for (auto it = res_1e5.rbegin(); it != res_1e5.rend(); ++it) {
+        std::string digit_str = std::to_string(*it);
+        if (digit_str.size() < 5) {
+            s += std::string(5 - digit_str.size(), '0');
         }
+        s += digit_str;
     }
-    if (current > 0) {
-        res.mag.push_back(current);
+    // Remove leading zeros
+    size_t start = 0;
+    while (start < s.size() && s[start] == '0') {
+        start++;
     }
+    int2048 res;
+    if (start == s.size()) {
+        res = int2048(0);
+    } else {
+        res.read(s.substr(start));
+    }
+    res.is_negative = false;
     res.normalize();
+
     return res;
 }
 
@@ -259,33 +260,74 @@ int2048 int2048::divide_mag(const int2048& dividend, const int2048& divisor, int
 
     int quotient_size = dividend.mag.size() - divisor.mag.size() + 1;
     quotient.mag.resize(quotient_size, 0);
+    int k = divisor.mag.size();
 
     for (int i = quotient_size - 1; i >= 0; --i) {
-        long long low = 0, high = BASE - 1;
-        long long best_q = 0;
+        long long q = 0;
+        int m = remainder.mag.size();
+        int m_prime = m - i;
 
-        while (low <= high) {
-            long long mid = low + (high - low) / 2;
-            int2048 mid_num(mid);
-            int2048 product = multiply_mag(mid_num, divisor);
-            bool product_is_zero = (product.mag.size() == 1 && product.mag[0] == 0);
-            if (!product_is_zero) {
-                product.mag.insert(product.mag.begin(), i, 0);
+        if (m_prime > 0) {
+            int t = std::min(k + 1, m_prime);
+            long long R_top = 0;
+            for (int j = 0; j < t; ++j) {
+                int rem_digit_idx = (m - 1) - j;
+                if (rem_digit_idx < i) {
+                    break;
+                }
+                R_top = R_top * BASE + remainder.mag[rem_digit_idx];
             }
-            int cmp = compare_mag(product, remainder);
-            if (cmp <= 0) {
-                best_q = mid;
-                low = mid + 1;
+
+            long long D_top = 0;
+            int d_take = std::min(k, t);
+            for (int j = 0; j < d_take; ++j) {
+                int div_digit_idx = (k - 1) - j;
+                D_top = D_top * BASE + divisor.mag[div_digit_idx];
+            }
+
+            if (D_top != 0) {
+                q = R_top / D_top;
+                if (q < 0) q = 0;
+                if (q >= BASE) q = BASE - 1;
             } else {
-                high = mid - 1;
+                q = BASE - 1;
+            }
+
+            while (q > 0) {
+                int2048 q_num(q);
+                int2048 product = multiply_mag(q_num, divisor);
+                bool product_is_zero = (product.mag.size() == 1 && product.mag[0] == 0);
+                if (!product_is_zero) {
+                    product.mag.insert(product.mag.begin(), i, 0);
+                }
+                int cmp = compare_mag(product, remainder);
+                if (cmp <= 0) {
+                    break;
+                }
+                q--;
+            }
+
+            while (q < BASE - 1) {
+                int2048 q_plus_1_num(q + 1);
+                int2048 product = multiply_mag(q_plus_1_num, divisor);
+                bool product_is_zero = (product.mag.size() == 1 && product.mag[0] == 0);
+                if (!product_is_zero) {
+                    product.mag.insert(product.mag.begin(), i, 0);
+                }
+                int cmp = compare_mag(product, remainder);
+                if (cmp <= 0) {
+                    q++;
+                } else {
+                    break;
+                }
             }
         }
 
-        quotient.mag[i] = best_q;
+        quotient.mag[i] = q;
 
-        if (best_q != 0) {
-            int2048 best_q_num(best_q);
-            int2048 subtract_val = multiply_mag(best_q_num, divisor);
+        if (q != 0) {
+            int2048 q_num(q);
+            int2048 subtract_val = multiply_mag(q_num, divisor);
             if (!(subtract_val.mag.size() == 1 && subtract_val.mag[0] == 0)) {
                 subtract_val.mag.insert(subtract_val.mag.begin(), i, 0);
             }
