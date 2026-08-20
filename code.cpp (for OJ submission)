@@ -1,43 +1,78 @@
-#include "int2048.h"
+#pragma once
+#ifndef SJTU_BIGINTEGER
+#define SJTU_BIGINTEGER
+
 #include <complex>
-#include <cmath>
-#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <string>
+#include <vector>
 
 namespace sjtu {
+class int2048 {
+private:
+    bool is_negative;
+    std::vector<long long> mag;
+    static const long long BASE = 1000000000LL;
 
-using cd = std::complex<double>;
-const double PI = std::acos(-1.0);
+    void normalize();
+    static int compare_mag(const int2048& a, const int2048& b);
+    static int2048 add_mag(const int2048& a, const int2048& b);
+    static int2048 subtract_mag(const int2048& a, const int2048& b);
+    static int2048 multiply_mag(const int2048& a, const int2048& b);
+    static int2048 divide_mag(const int2048& dividend, const int2048& divisor, int2048& remainder);
 
-void fft(std::vector<cd>& a, bool invert) {
-    int n = a.size();
-    for (int i = 1, j = 0; i < n; i++) {
-        int bit = n >> 1;
-        for (; j & bit; bit >>= 1)
-            j ^= bit;
-        j ^= bit;
-        if (i < j)
-            std::swap(a[i], a[j]);
-    }
+public:
+    int2048();
+    int2048(long long);
+    int2048(const std::string &);
+    int2048(const int2048 &);
 
-    for (int len = 2; len <= n; len <<= 1) {
-        double ang = 2 * PI / len * (invert ? -1 : 1);
-        cd wlen(std::cos(ang), std::sin(ang));
-        for (int i = 0; i < n; i += len) {
-            cd w(1);
-            for (int j = 0; j < len / 2; j++) {
-                cd u = a[i + j], v = a[i + j + len/2] * w;
-                a[i + j] = u + v;
-                a[i + j + len/2] = u - v;
-                w *= wlen;
-            }
-        }
-    }
+    void read(const std::string &);
+    void print();
 
-    if (invert) {
-        for (cd& x : a)
-            x /= n;
-    }
-}
+    int2048 &add(const int2048 &);
+    friend int2048 add(int2048, const int2048 &);
+
+    int2048 &minus(const int2048 &);
+    friend int2048 minus(int2048, const int2048 &);
+
+    int2048 operator+() const;
+    int2048 operator-() const;
+
+    int2048 &operator=(const int2048 &);
+
+    int2048 &operator+=(const int2048 &);
+    friend int2048 operator+(int2048, const int2048 &);
+
+    int2048 &operator-=(const int2048 &);
+    friend int2048 operator-(int2048, const int2048 &);
+
+    int2048 &operator*=(const int2048 &);
+    friend int2048 operator*(int2048, const int2048 &);
+
+    int2048 &operator/=(const int2048 &);
+    friend int2048 operator/(int2048, const int2048 &);
+
+    int2048 &operator%=(const int2048 &);
+    friend int2048 operator%(int2048, const int2048 &);
+
+    friend std::istream &operator>>(std::istream &, int2048 &);
+    friend std::ostream &operator<<(std::ostream &, const int2048 &);
+
+    friend bool operator==(const int2048 &, const int2048 &);
+    friend bool operator!=(const int2048 &, const int2048 &);
+    friend bool operator<(const int2048 &, const int2048 &);
+    friend bool operator>(const int2048 &, const int2048 &);
+    friend bool operator<=(const int2048 &, const int2048 &);
+    friend bool operator>=(const int2048 &, const int2048 &);
+};
+} // namespace sjtu
+
+#endif
+
+namespace sjtu {
 
 const long long int2048::BASE;
 
@@ -100,84 +135,18 @@ int2048 int2048::subtract_mag(const int2048& a, const int2048& b) {
 }
 
 int2048 int2048::multiply_mag(const int2048& a, const int2048& b) {
-    if ((a.mag.size() == 1 && a.mag[0] == 0) || (b.mag.size() == 1 && b.mag[0] == 0)) {
-        int2048 res;
-        res.is_negative = false;
-        res.mag = {0};
-        return res;
-    }
-
-    std::vector<long long> a_1e5, b_1e5;
-    for (long long num : a.mag) {
-        a_1e5.push_back(num % 100000LL);
-        a_1e5.push_back(num / 100000LL);
-    }
-    while (a_1e5.size() > 1 && a_1e5.back() == 0) {
-        a_1e5.pop_back();
-    }
-    for (long long num : b.mag) {
-        b_1e5.push_back(num % 100000LL);
-        b_1e5.push_back(num / 100000LL);
-    }
-    while (b_1e5.size() > 1 && b_1e5.back() == 0) {
-        b_1e5.pop_back();
-    }
-
-    std::vector<cd> fa(a_1e5.begin(), a_1e5.end()), fb(b_1e5.begin(), b_1e5.end());
-    int n = 1;
-    while (n < a_1e5.size() + b_1e5.size()) {
-        n <<= 1;
-    }
-    fa.resize(n);
-    fb.resize(n);
-
-    fft(fa, false);
-    fft(fb, false);
-    for (int i = 0; i < n; i++) {
-        fa[i] *= fb[i];
-    }
-    fft(fa, true);
-
-    std::vector<long long> res_1e5(n);
-    for (int i = 0; i < n; i++) {
-        res_1e5[i] = std::round(fa[i].real());
-    }
-
-    long long carry = 0;
-    for (int i = 0; i < res_1e5.size() || carry; i++) {
-        if (i < res_1e5.size()) {
-            carry += res_1e5[i];
-            res_1e5[i] = carry % 100000LL;
-        } else {
-            res_1e5.push_back(carry % 100000LL);
-        }
-        carry /= 100000LL;
-    }
-
-    while (res_1e5.size() > 1 && res_1e5.back() == 0) {
-        res_1e5.pop_back();
-    }
-
     int2048 res;
     res.is_negative = false;
-    res.mag.clear();
-    long long current = 0;
-    long long power = 1;
-    int digits = 0;
-    for (int i = 0; i < res_1e5.size(); i++) {
-        long long d = res_1e5[i];
-        current += d * power;
-        power *= 100000LL;
-        digits += 5;
-        if (digits >= 9) {
-            res.mag.push_back(current % BASE);
-            current /= BASE;
-            power = 100000LL;
-            digits -= 9;
+    res.mag.resize(a.mag.size() + b.mag.size(), 0);
+    for (int i = 0; i < a.mag.size(); ++i) {
+        long long carry = 0;
+        for (int j = 0; j < b.mag.size() || carry; ++j) {
+            long long product = res.mag[i + j];
+            if (j < b.mag.size()) product += a.mag[i] * b.mag[j];
+            product += carry;
+            res.mag[i + j] = product % BASE;
+            carry = product / BASE;
         }
-    }
-    if (current > 0) {
-        res.mag.push_back(current);
     }
     res.normalize();
     return res;
@@ -239,12 +208,7 @@ int2048::int2048() : is_negative(false), mag{0} {}
 int2048::int2048(long long n) {
     if (n < 0) {
         is_negative = true;
-        if (n == -9223372036854775807LL - 1) {
-            read("-9223372036854775808");
-            return;
-        } else {
-            n = -n;
-        }
+        n = -n;
     } else {
         is_negative = false;
     }
